@@ -1,0 +1,259 @@
+---
+title: "PHC Project"
+author: "Samuel Li"
+date: "2024-03-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r library}
+library(readxl)
+library(ggplot2)
+library(tidyverse)
+library(tidyr)
+library(readxlsb)
+library(writexl)
+library(RColorBrewer)
+library(plotrix)
+library(dplyr)
+library(ggforce)
+
+# read in the PIT Counts race data (extracted from the original file since it is 
+# hard to work on the data using xlsb file)
+# read in the Gainesville Census data from 
+# https://datausa.io/profile/geo/alachua-county-fl
+PIT_race <- read_excel("PIT_CoC_Data_1423.xlsx")
+PIT_race_census <- read_excel("Alachua County population census.xlsx")
+
+# adjust the year from 2014-2021 since missing data in Census data
+PIT_race <- PIT_race[PIT_race$Year <= 2021, ]
+PIT_race_census <- PIT_race_census[PIT_race_census$YEAR < 2022, ]
+PIT_race_census <- PIT_race_census[1:8,]
+
+# read in the PIT under 18 data (extracted from the original file since it is 
+# hard to work on the data using xlsb file)
+PIT_under18 <- read_excel("Under 18 homelessness.xlsx")
+
+# read in the Veteran data by combining all sheets
+Veteran_list <- lapply(excel_sheets("2011-2023-PIT-Veteran-Counts-by-CoC.xlsx"), 
+                       function(x) read_excel("2011-2023-PIT-Veteran-Counts-by-CoC.xlsx", sheet = x))
+Veteran <- bind_rows(Veteran_list, .id="Sheet")
+
+# extract Alachua's data and remove any row with NA in the Sheet column
+Veteran_Alachua <- Veteran[Veteran$`CoC Number` == "FL-508", ]
+Veteran_Alachua <- Veteran_Alachua %>% drop_na(Sheet)
+```
+
+Create the pie charts using PIT_race and PIT_race_population data sets 2014-2021
+```{r Pie2}
+# calculate the averages of homelessness population in Gainesville 2014-2021
+# p.s. there is no homelessness data by race before 2014
+means <- c(mean(PIT_race$`Overall Homeless - Hispanic/Latin(o)(a)(x)`),
+                mean(PIT_race$`Overall Homeless - White`),
+                mean(PIT_race$`Overall Homeless - Black, African American, or African`),
+                mean(PIT_race$`Overall Homeless - Asian or Asian American`),
+                mean(PIT_race$`Overall Homeless - American Indian, Alaska Native, or Indigenous`),
+                mean(PIT_race$`Overall Homeless - Native Hawaiian or Other Pacific Islander`),
+                mean(PIT_race$`Overall Homeless - Multiple Races`))
+
+# labels for the legends with percentages
+labels <- c("Hispanic/Latin", "White", 
+            "Black, African American, or African", "Asian or Asian American",
+            "American Indian, Alaska Native, or Indigenous",
+            "Native Hawaiian or Other Pacific Islander",
+            "Multiple Races")
+percent <- round(means / sum(means) * 100, 2)
+labels <- paste(labels, percent) # add percents to labels
+labels <- paste(labels,"%",sep="")
+
+# create the data frame
+df <- data.frame(
+  Races = labels,
+  Value = means
+)
+
+df <- df %>% 
+  mutate(end = 2 * pi * cumsum(Value)/sum(Value),
+         start = lag(end, default = 0),
+         middle = 0.5 * (start + end),
+         hjust = c(0, 0, 1, 1, 1, 1, 1),
+         vjust = c(0, 1, 0, 1, 0.5, -5, -7))
+
+# create the Pie chart
+ggplot(df) + 
+  geom_arc_bar(aes(x0 = 0, y0 = 0, r0 = 0, r = 1,
+                   start = start, end = end, fill = Races)) +
+  coord_fixed() + 
+  ggtitle("Pie Chart of Homelessness by Race for Gainesville (2014-2021) (Average Method)") +
+  scale_x_continuous(limits = c(-1.5, 1.5),  # Adjust so labels are not cut off
+                     name = "", breaks = NULL, labels = NULL) +
+  scale_y_continuous(limits = c(-1, 1.1),    # Adjust so labels are not cut off
+                     name = "", breaks = NULL, labels = NULL)
+
+# calculate the averages of population by race in Gainesville 2014-2021 based
+# on the Gainesville Census data
+means2 <- c(mean(PIT_race_census$Hispanic), mean(as.double(PIT_race_census$White)),
+            mean(PIT_race_census$Black), mean(PIT_race_census$Asian),
+            mean(PIT_race_census$`American Indian/Alaska Native`),
+            mean(PIT_race_census$`Native Hawaiian`), 
+            mean(PIT_race_census$Mutliracial))
+
+# create labels for the pie chart based on percentages
+labels2 <- c("Hispanic/Latin", "White", 
+            "Black, African American, or African", "Asian or Asian American",
+            "American Indian, Alaska Native, or Indigenous",
+            "Native Hawaiian or Other Pacific Islander",
+            "Multiple Races")
+percent2 <- round(means2 / sum(means2) * 100, 2)
+labels2 <- paste(labels2, percent2) # add percents to labels
+labels2 <- paste(labels2,"%",sep="")
+
+# create the data frame
+df2 <- data.frame(
+  Races = labels2,
+  Value = means2
+)
+
+df2 <- df2 %>% 
+  mutate(end = 2 * pi * cumsum(Value)/sum(Value),
+         start = lag(end, default = 0),
+         middle = 0.5 * (start + end),
+         hjust = c(0, 0, 1, 1, 1, 1, 1),
+         vjust = c(0, 1, 0, 1, 0.5, -5, -7))
+
+# create the Pie chart
+ggplot(df2) + 
+  geom_arc_bar(aes(x0 = 0, y0 = 0, r0 = 0, r = 1,
+                   start = start, end = end, fill = Races)) +
+  coord_fixed() + 
+  ggtitle("Pie Chart of Population by Race for Gainesville (2014-2021) (Average Method)") +
+  scale_x_continuous(limits = c(-1.5, 1.5),  # Adjust so labels are not cut off
+                     name = "", breaks = NULL, labels = NULL) +
+  scale_y_continuous(limits = c(-1, 1.1),    # Adjust so labels are not cut off
+                     name = "", breaks = NULL, labels = NULL)
+
+# using the method from https://stackoverflow.com/questions/48184645/how-can-i-put-the-labels-outside-of-piechart
+```
+
+Create the bar graph: sheltered vs. unsheltered veterans (Veteran data) 
+2018-2023
+```{r Bar}
+# convert the numbers in the Sheet columns to avoid errors and extract data from
+# 2018-2023
+Veteran_Alachua_1323 <- Veteran_Alachua[as.numeric(Veteran_Alachua$Sheet) <= 6, ]
+Sheltered_Data <- c()
+Unsheltered_Data <- c()
+counter <- 1
+
+# use iteration to search for information we want
+for(i in 1:6)
+{
+  # get the data and combine with the original data
+  # case 1: 2023
+  if(i == 1)
+  {
+    # including Sheet, CoC Number, and CoC Name columns
+    counter <- counter + 7
+    Sheltered_Data <- c(Sheltered_Data, Veteran_Alachua_1323[i, counter])
+    Unsheltered_Data <- c(Unsheltered_Data, Veteran_Alachua_1323[i, counter + 1])
+    counter <- counter + 1
+  }
+  # case 2: others
+  else
+  {
+    counter <- counter + 5
+    Sheltered_Data <- c(Sheltered_Data, Veteran_Alachua_1323[i, counter])
+    Unsheltered_Data <- c(Unsheltered_Data, Veteran_Alachua_1323[i, counter + 1])
+    counter <- counter + 1
+  }
+}
+
+# create empty data frames to convert the extracted from list to data frame
+mat <- matrix(nrow = 6, ncol = 1)
+Sheltered_Data_df <- data.frame(mat)
+colnames(Sheltered_Data_df) <- c("Sheltered Total Homeless Veterans")
+rownames(Sheltered_Data_df) <- c("2018", "2019", "2020", "2021", "2022", "2023")
+Unsheltered_Data_df <- data.frame(mat)
+colnames(Unsheltered_Data_df) <- c("Unsheltered Total Homeless Veterans")
+rownames(Unsheltered_Data_df) <- c("2018", "2019", "2020", "2021", "2022", "2023")
+j <- 6
+k <- 1
+
+# iterate through the lists and data frames to extract and store values
+while(j > 0)
+{
+  Sheltered_Data_df[k, 1] <- Sheltered_Data[j]
+  Unsheltered_Data_df[k, 1] <- Unsheltered_Data[j]
+  j <- j - 1
+  k <- k + 1
+}
+
+# extract data and year
+sheltered <- Sheltered_Data_df[, 1]
+unsheltered <- Unsheltered_Data_df[, 1]
+year <- as.factor(c(2018, 2019, 2020, 2021, 2022, 2023))
+
+# create a new data frame for later usage
+data <- data.frame(
+  Year = year,
+  Sheltered = sheltered,
+  Unsheltered = unsheltered
+)
+
+# create the final graph
+# the following code is being used for downloading the graph. Remove # to 
+# download
+#jpeg('Veterans.jpg')
+data_long <- gather(data, "Status", "Count", -Year)
+ggplot(data_long, aes(x = Year, y = Count, fill = Status)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Homeless Veterans by Shelter Status (2018-2023)",
+       x = "Year",
+       y = "Count",
+       fill = "Shelter Status") +
+  theme_minimal()
+# the following code is being used for downloading the graph. Remove # to 
+# download
+# dev.off()
+```
+
+Create the line graph to find the overall trend of the percentages of teenagers
+(under the age of 18) experiencing homelessness (PIT data) 2013-2023
+```{r Line, fig.width = 8}
+# calculate the percentages of homelessness under the age of 18 and create a
+# data frame
+percentages <- PIT_under18$`Uner 18` / PIT_under18$`Overall homeless`
+df3 <- data.frame(
+  Year = seq(as.Date("2013-01-01"), by = "year", length.out = 11),
+  values = rev(percentages)
+)
+
+# create the line graph from 2013 to 2023
+# the following code is being used for downloading the graph. Remove # to 
+# download
+# jpeg('Under18.jpg')
+ggplot(df3, aes(x = Year, y = values, label = round(values, 2))) +
+  geom_line() +
+  geom_point(size = 3) +  # Set the size of the points
+  geom_text(aes(label = round(values, 2)), vjust = -0.5, hjust = 1, size = 4, 
+            col = "blue") +
+  labs(x = "Year", y = "Percentages of Homelessness",
+       title = "Line Graph of Homelessness under the age of 18 (2013-2023)") +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y", 
+               limits = as.Date(c("2013-01-01", "2023-12-31"))) +
+  theme_minimal()
+# the following code is being used for downloading the graph. Remove # to 
+# download
+# dev.off()
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
